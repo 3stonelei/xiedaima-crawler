@@ -41,7 +41,7 @@ public class Main {
                 Document doc = httpGetAndHtmlParse(link);
 
                 //java8中表达式代替获取页面中链接并存入连接池
-                doc.select("a").stream().map(aTag->aTag.attr("herf")).forEach(linkPool::add);
+                doc.select("a").stream().map(aTag -> aTag.attr("herf")).forEach(linkPool::add);
                 //是一个新闻页面就存入数据
                 isNewsPageToStoreData(doc);
 
