@@ -1,5 +1,6 @@
 package com.github.stone;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -10,30 +11,35 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
+
 import java.io.IOException;
+import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+
 
 /**
  * @author Lilei
  * @date 2022/7/12-@11:13
  */
 public class Main {
-    public static void main(String[] args) throws IOException {
-        //待处理的链接池
-        List<String> linkPool = new ArrayList<>();
-        linkPool.add("https://sina.cn");
-        //已经处理的链接
-        Set<String> processedPool = new HashSet<>();
+
+    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD")
+    public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/crawler_news", "root", "123456");
+
 
         while (true) {
+            //待处理的链接池
+            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from links_to_be_processed");
+
             if (linkPool.isEmpty()) {
                 break;
             }
             String link = linkPool.remove(linkPool.size() - 1);
-            if (processedPool.contains(link)) {
+            deleteUrlFromDatabase(connection, link);
+            if (isProcessedLink(connection, link)) {
                 continue;
             }
             if (isNeedLink(link)) {
@@ -41,14 +47,67 @@ public class Main {
                 Document doc = httpGetAndHtmlParse(link);
 
                 //java8中表达式代替获取页面中链接并存入连接池
-                doc.select("a").stream().map(aTag->aTag.attr("herf")).forEach(linkPool::add);
+                for (Element aTag : doc.select("a")) {
+                    String href = aTag.attr("href");
+                    storeUrlIntoDatabase(connection, href);
+                }
                 //是一个新闻页面就存入数据
                 isNewsPageToStoreData(doc);
 
-                processedPool.add(link);
+                //已处理的链接加入数据库
+                updateProcessedLink(connection, link);
             }
 
         }
+    }
+
+    private static void updateProcessedLink(Connection connection, String link) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("insert into links_have_been_processed values (?)")) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        }
+
+    }
+
+    private static void storeUrlIntoDatabase(Connection connection, String link) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("insert into links_to_be_processed (link) values (?) ")) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        }
+
+    }
+
+    private static boolean isProcessedLink(Connection connection, String link) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("select link from links_have_been_processed where link=?")) {
+            statement.setString(1, link);
+            ResultSet resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                return true;
+            }
+            return false;
+        }
+    }
+
+
+    private static void deleteUrlFromDatabase(Connection connection, String link) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("delete from links_to_be_processed where link = ?")) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        }
+
+    }
+
+    //从数据库中获取url
+    private static List<String> loadUrlsFromDatabase(Connection connection, String sql) throws SQLException {
+        List<String> result = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            ResultSet toBeProcessedLink = statement.executeQuery();
+            while (toBeProcessedLink.next()) {
+                result.add(toBeProcessedLink.getString(1));
+            }
+
+        }
+        return result;
     }
 
     private static Document httpGetAndHtmlParse(String link) throws IOException {
