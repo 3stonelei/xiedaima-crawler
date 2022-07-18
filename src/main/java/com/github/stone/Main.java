@@ -15,7 +15,6 @@ import org.jsoup.nodes.Element;
 import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.List;
 
 
 /**
@@ -29,23 +28,15 @@ public class Main {
         Class.forName("com.mysql.cj.jdbc.Driver");
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/crawler_news", "root", "123456");
 
+        String link;
+        while ((link = getLinkThenDelete(connection)) != null) {
 
-        while (true) {
-            //待处理的链接池
-            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from links_to_be_processed");
-
-            if (linkPool.isEmpty()) {
-                break;
-            }
-            String link = linkPool.remove(linkPool.size() - 1);
-            deleteUrlFromDatabase(connection, link);
             if (isProcessedLink(connection, link)) {
                 continue;
             }
             if (isNeedLink(link)) {
                 //需要的链接
                 Document doc = httpGetAndHtmlParse(link);
-
                 //java8中表达式代替获取页面中链接并存入连接池
                 for (Element aTag : doc.select("a")) {
                     String href = aTag.attr("href");
@@ -53,12 +44,19 @@ public class Main {
                 }
                 //是一个新闻页面就存入数据
                 isNewsPageToStoreData(doc);
-
                 //已处理的链接加入数据库
                 updateProcessedLink(connection, link);
             }
 
         }
+    }
+
+    private static String getLinkThenDelete(Connection connection) throws SQLException {
+        String link = loadUrlFromDatabase(connection, "select link from links_to_be_processed limit 1");
+        if (link != null) {
+            deleteUrlFromDatabase(connection, link, "delete from links_to_be_processed where link = ?");
+        }
+        return link;
     }
 
     private static void updateProcessedLink(Connection connection, String link) throws SQLException {
@@ -78,19 +76,24 @@ public class Main {
     }
 
     private static boolean isProcessedLink(Connection connection, String link) throws SQLException {
+        ResultSet resultSet = null;
         try (PreparedStatement statement = connection.prepareStatement("select link from links_have_been_processed where link=?")) {
             statement.setString(1, link);
-            ResultSet resultSet = statement.executeQuery();
+            resultSet = statement.executeQuery();
             while (resultSet.next()) {
                 return true;
             }
             return false;
+        } finally {
+            if (resultSet != null) {
+                resultSet.close();
+            }
         }
     }
 
 
-    private static void deleteUrlFromDatabase(Connection connection, String link) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("delete from links_to_be_processed where link = ?")) {
+    private static void deleteUrlFromDatabase(Connection connection, String link, String sql) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, link);
             statement.executeUpdate();
         }
@@ -98,16 +101,15 @@ public class Main {
     }
 
     //从数据库中获取url
-    private static List<String> loadUrlsFromDatabase(Connection connection, String sql) throws SQLException {
-        List<String> result = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            ResultSet toBeProcessedLink = statement.executeQuery();
-            while (toBeProcessedLink.next()) {
-                result.add(toBeProcessedLink.getString(1));
-            }
+    private static String loadUrlFromDatabase(Connection connection, String sql) throws SQLException {
 
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                return resultSet.getString(1);
+            }
         }
-        return result;
+        return null;
     }
 
     private static Document httpGetAndHtmlParse(String link) throws IOException {
