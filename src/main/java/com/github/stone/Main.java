@@ -15,6 +15,7 @@ import org.jsoup.nodes.Element;
 import java.io.IOException;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 
 /**
@@ -22,16 +23,22 @@ import java.util.ArrayList;
  * @date 2022/7/12-@11:13
  */
 public class Main {
+    public static void main(String[] args) throws SQLException, IOException, ClassNotFoundException {
+        Main main = new Main();
+        main.run();
+    }
+
+    Dao dao = new Dao();
 
     @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD")
-    public static void main(String[] args) throws IOException, SQLException, ClassNotFoundException {
+    public void run() throws ClassNotFoundException, SQLException, IOException {
         Class.forName("com.mysql.cj.jdbc.Driver");
         Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/crawler_news", "root", "123456");
 
         String link;
         while ((link = getLinkThenDelete(connection)) != null) {
 
-            if (isProcessedLink(connection, link)) {
+            if (dao.isProcessedLink(connection, link)) {
                 continue;
             }
             if (isNeedLink(link)) {
@@ -40,77 +47,29 @@ public class Main {
                 //java8中表达式代替获取页面中链接并存入连接池
                 for (Element aTag : doc.select("a")) {
                     String href = aTag.attr("href");
-                    storeUrlIntoDatabase(connection, href);
+                    if (!href.contains("javascript:")) {
+                        dao.storeUrlIntoDatabase(connection, href);
+                    }
+
                 }
                 //是一个新闻页面就存入数据
-                isNewsPageToStoreData(doc);
+                isNewsPageToStoreData(connection, doc, link);
                 //已处理的链接加入数据库
-                updateProcessedLink(connection, link);
+                dao.updateProcessedLink(connection, link);
             }
 
         }
     }
 
-    private static String getLinkThenDelete(Connection connection) throws SQLException {
-        String link = loadUrlFromDatabase(connection, "select link from links_to_be_processed limit 1");
+
+    private String getLinkThenDelete(Connection connection) throws SQLException {
+        String link = dao.loadUrlFromDatabase(connection);
         if (link != null) {
-            deleteUrlFromDatabase(connection, link, "delete from links_to_be_processed where link = ?");
+            dao.deleteUrlFromDatabase(connection, link);
         }
         return link;
     }
 
-    private static void updateProcessedLink(Connection connection, String link) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("insert into links_have_been_processed values (?)")) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-
-    }
-
-    private static void storeUrlIntoDatabase(Connection connection, String link) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("insert into links_to_be_processed (link) values (?) ")) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-
-    }
-
-    private static boolean isProcessedLink(Connection connection, String link) throws SQLException {
-        ResultSet resultSet = null;
-        try (PreparedStatement statement = connection.prepareStatement("select link from links_have_been_processed where link=?")) {
-            statement.setString(1, link);
-            resultSet = statement.executeQuery();
-            while (resultSet.next()) {
-                return true;
-            }
-            return false;
-        } finally {
-            if (resultSet != null) {
-                resultSet.close();
-            }
-        }
-    }
-
-
-    private static void deleteUrlFromDatabase(Connection connection, String link, String sql) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-
-    }
-
-    //从数据库中获取url
-    private static String loadUrlFromDatabase(Connection connection, String sql) throws SQLException {
-
-        try (PreparedStatement statement = connection.prepareStatement(sql);
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                return resultSet.getString(1);
-            }
-        }
-        return null;
-    }
 
     private static Document httpGetAndHtmlParse(String link) throws IOException {
         CloseableHttpClient httpclient = HttpClients.createDefault();
@@ -131,13 +90,14 @@ public class Main {
         }
     }
 
-    private static void isNewsPageToStoreData(Document doc) {
+    private void isNewsPageToStoreData(Connection connection, Document doc, String url) throws SQLException {
         ArrayList<Element> articleTags = doc.select("article");
         if (!articleTags.isEmpty()) {
             for (Element articleTag : articleTags
             ) {
                 String title = articleTags.get(0).child(0).text();
-                System.out.println(title);
+                String content = articleTag.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
+                dao.insertNewsIntoDatabase(connection, url, title, content);
             }
         }
     }
