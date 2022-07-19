@@ -1,17 +1,32 @@
 package com.github.stone;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+import java.sql.*;
 
 /**
  * @author Lilei
  * @date 2022/7/18-@20:43
  */
-public class Dao {
+public class Dao implements CrawlerDao {
 
-    public static void deleteUrlFromDatabase(Connection connection, String link) throws SQLException {
+    private final Connection connection;
+
+    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD")
+    public Dao() {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        try {
+            this.connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/crawler_news", "root", "123456");
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void deleteUrlFromDatabase(String link) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("delete from links_to_be_processed where link = ?")) {
             statement.setString(1, link);
             statement.executeUpdate();
@@ -19,7 +34,7 @@ public class Dao {
     }
 
     //从数据库中获取url
-    public static String loadUrlFromDatabase(Connection connection) throws SQLException {
+    public String loadUrlFromDatabase() throws SQLException {
 
         try (PreparedStatement statement = connection.prepareStatement("select link from links_to_be_processed limit 1");
              ResultSet resultSet = statement.executeQuery()) {
@@ -30,22 +45,15 @@ public class Dao {
         return null;
     }
 
-    public static void updateProcessedLink(Connection connection, String link) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("insert into links_have_been_processed values (?)")) {
-            statement.setString(1, link);
-            statement.executeUpdate();
-        }
-    }
-
-    public static void storeUrlIntoDatabase(Connection connection, String link) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("insert into links_to_be_processed (link) values (?) ")) {
+    public void storeUrlIntoDatabase(String link, String sql) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, link);
             statement.executeUpdate();
         }
 
     }
 
-    public static boolean isProcessedLink(Connection connection, String link) throws SQLException {
+    public boolean isProcessedLink(String link) throws SQLException {
         ResultSet resultSet = null;
         try (PreparedStatement statement = connection.prepareStatement("select link from links_have_been_processed where link=?")) {
             statement.setString(1, link);
@@ -61,7 +69,7 @@ public class Dao {
         }
     }
 
-    public static void insertNewsIntoDatabase(Connection connection, String url, String title, String content) throws SQLException {
+    public void insertNewsIntoDatabase(String url, String title, String content) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("insert into news (title,content,url,create_at,nodified_at) values(?,?,?,now(),now())")) {
             statement.setString(1, title);
             statement.setString(2, content);
