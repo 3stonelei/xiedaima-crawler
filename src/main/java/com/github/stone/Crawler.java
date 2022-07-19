@@ -23,11 +23,11 @@ import java.util.stream.Collectors;
  */
 public class Crawler {
     public static void main(String[] args) throws SQLException, IOException, ClassNotFoundException {
-        Crawler main = new Crawler();
-        main.run();
+        Crawler crawler = new Crawler();
+        crawler.run();
     }
 
-    Dao dao = new Dao();
+    MybatisDao dao = new MybatisDao();
 
     public void run() throws ClassNotFoundException, SQLException, IOException {
 
@@ -44,14 +44,14 @@ public class Crawler {
                 for (Element aTag : doc.select("a")) {
                     String href = aTag.attr("href");
                     if (!href.contains("javascript:")) {
-                        dao.storeUrlIntoDatabase(href, "insert into links_to_be_processed (link) values (?) ");
+                        dao.storeToBeProcessedLink(href);
                     }
 
                 }
                 //是一个新闻页面就存入数据
                 isNewsPageToStoreData(doc, link);
                 //已处理的链接加入数据库
-                dao.storeUrlIntoDatabase(link, "insert into links_have_been_processed values (?)");
+                dao.storeAlreadyProcessedLink(link);
             }
 
         }

@@ -11,9 +11,11 @@ public interface CrawlerDao {
 
     String loadUrlFromDatabase() throws SQLException;
 
-    void storeUrlIntoDatabase(String link, String sql) throws SQLException;
-
     boolean isProcessedLink(String link) throws SQLException;
 
     void insertNewsIntoDatabase(String url, String title, String content) throws SQLException;
+
+    void storeToBeProcessedLink(String href) throws SQLException;
+
+    void storeAlreadyProcessedLink(String link) throws SQLException;
 }
