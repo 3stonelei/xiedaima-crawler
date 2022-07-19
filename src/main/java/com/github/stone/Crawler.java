@@ -1,6 +1,5 @@
 package com.github.stone;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -22,23 +21,20 @@ import java.util.stream.Collectors;
  * @author Lilei
  * @date 2022/7/12-@11:13
  */
-public class Main {
+public class Crawler {
     public static void main(String[] args) throws SQLException, IOException, ClassNotFoundException {
-        Main main = new Main();
-        main.run();
+        Crawler crawler = new Crawler();
+        crawler.run();
     }
 
-    Dao dao = new Dao();
+    MybatisDao dao = new MybatisDao();
 
-    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD")
     public void run() throws ClassNotFoundException, SQLException, IOException {
-        Class.forName("com.mysql.cj.jdbc.Driver");
-        Connection connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/crawler_news", "root", "123456");
 
         String link;
-        while ((link = getLinkThenDelete(connection)) != null) {
+        while ((link = getLinkThenDelete()) != null) {
 
-            if (dao.isProcessedLink(connection, link)) {
+            if (dao.isProcessedLink(link)) {
                 continue;
             }
             if (isNeedLink(link)) {
@@ -48,24 +44,24 @@ public class Main {
                 for (Element aTag : doc.select("a")) {
                     String href = aTag.attr("href");
                     if (!href.contains("javascript:")) {
-                        dao.storeUrlIntoDatabase(connection, href);
+                        dao.storeToBeProcessedLink(href);
                     }
 
                 }
                 //是一个新闻页面就存入数据
-                isNewsPageToStoreData(connection, doc, link);
+                isNewsPageToStoreData(doc, link);
                 //已处理的链接加入数据库
-                dao.updateProcessedLink(connection, link);
+                dao.storeAlreadyProcessedLink(link);
             }
 
         }
     }
 
 
-    private String getLinkThenDelete(Connection connection) throws SQLException {
-        String link = dao.loadUrlFromDatabase(connection);
+    private String getLinkThenDelete() throws SQLException {
+        String link = dao.loadUrlFromDatabase();
         if (link != null) {
-            dao.deleteUrlFromDatabase(connection, link);
+            dao.deleteUrlFromDatabase(link);
         }
         return link;
     }
@@ -90,14 +86,14 @@ public class Main {
         }
     }
 
-    private void isNewsPageToStoreData(Connection connection, Document doc, String url) throws SQLException {
+    private void isNewsPageToStoreData(Document doc, String url) throws SQLException {
         ArrayList<Element> articleTags = doc.select("article");
         if (!articleTags.isEmpty()) {
             for (Element articleTag : articleTags
             ) {
                 String title = articleTags.get(0).child(0).text();
                 String content = articleTag.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
-                dao.insertNewsIntoDatabase(connection, url, title, content);
+                dao.insertNewsIntoDatabase(url, title, content);
             }
         }
     }
