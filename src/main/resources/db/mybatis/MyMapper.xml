@@ -19,14 +19,14 @@
     where link=#{link}
   </select>
     <insert id="insertNews" parameterType="com.github.stone.News">
-        insert into news(title,content,url,create_at,nodified_at)
+        insert into news(title,content,url,create_at,modified_at)
         values (#{title},#{content},#{url},now(),now())
     </insert>
 
     <insert id="insertLink" parameterType="HashMap">
         insert into
         <choose>
-            <when test="table == link_to_be_processed">
+            <when test="table_name == 'link_to_be_processed'">
                 links_to_be_processed
             </when>
             <otherwise>

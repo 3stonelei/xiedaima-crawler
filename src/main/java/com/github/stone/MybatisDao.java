@@ -28,6 +28,13 @@ public class MybatisDao implements CrawlerDao {
         sqlSessionFactory = new SqlSessionFactoryBuilder().build(inputStream);
     }
 
+    public synchronized String getLinkThenDelete() throws SQLException {
+        String link = loadUrlFromDatabase();
+        if (link != null) {
+            deleteUrlFromDatabase(link);
+        }
+        return link;
+    }
     @Override
     public void deleteUrlFromDatabase(String link) throws SQLException {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
@@ -36,7 +43,7 @@ public class MybatisDao implements CrawlerDao {
     }
 
     @Override
-    public String loadUrlFromDatabase() throws SQLException {
+    public  String loadUrlFromDatabase() throws SQLException {
         try (SqlSession session = sqlSessionFactory.openSession()) {
             return session.selectOne("com.github.stone.MyMapper.selectLink");
         }
@@ -54,7 +61,7 @@ public class MybatisDao implements CrawlerDao {
     @Override
     public void insertNewsIntoDatabase(String url, String title, String content) throws SQLException {
         try (SqlSession session = sqlSessionFactory.openSession(true)) {
-            session.insert("com.github.stone.MyMapper.insertNews", new News(url, title, content));
+            session.insert("com.github.stone.MyMapper.insertNews", new News(title, content,url));
         }
     }
 

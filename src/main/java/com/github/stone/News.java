@@ -1,5 +1,7 @@
 package com.github.stone;
 
+import java.time.Instant;
+
 /**
  * @author Lilei
  * @date 2022/7/19-@19:11
@@ -8,6 +10,10 @@ public class News {
     private String title;
     private String content;
     private String url;
+
+    private Instant createAt;
+    private Instant modifiedAt;
+
 
     public News(String title, String content, String url) {
         this.title = title;
@@ -37,5 +43,21 @@ public class News {
 
     public void setUrl(String url) {
         this.url = url;
+    }
+
+    public Instant getCreateAt() {
+        return createAt;
+    }
+
+    public void setCreateAt(Instant createAt) {
+        this.createAt = createAt;
+    }
+
+    public Instant getModifiedAt() {
+        return modifiedAt;
+    }
+
+    public void setModifiedAt(Instant modifiedAt) {
+        this.modifiedAt = modifiedAt;
     }
 }
